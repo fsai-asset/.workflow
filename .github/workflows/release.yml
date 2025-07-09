@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Get version
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      - name: Fail version already used
+        run: |
+          VERSION=${{ steps.get_version.outputs.version }}
+          if git ls-remote --tags origin "refs/tags/v$VERSION" | grep -q .; then
+            echo "::error title=Release Tag Exists::Tag v$VERSION already exists. Increment version and try again."
+            exit 1
+          fi
+      - name: Setup NPM cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      - name: Install dependencies
+        run: npm clean-install --prefer-offline --no-audit --no-fund
+      - name: Install OS tool
+        run: npm install --global platform-os-tool --no-audit --no-fund
+      - name: Package with OS tool
+        run: os package-tool . --no-increment-version
+      - name: Find package file
+        id: find_package
+        run: |
+          PACKAGE=$(ls publish/*.zip | sort | tail -n 1)
+          echo "package=$PACKAGE" >> $GITHUB_OUTPUT
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: v${{ steps.get_version.outputs.version }}
+          body: |
+            ${{ github.event.head_commit.message }}
+          files: ${{ steps.find_package.outputs.package }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish GitHub Package
+        run: |
+          # GH_PUBLISH_TOKEN currently set a dedicated PAT in BenThompson's account. Service account needs to be created.
+          PACKAGE="${{ steps.find_package.outputs.package }}"
+          unzip -o "$PACKAGE" -d extracted_package
+
+          # Inject download link into README.md inside extracted_package
+          VERSION=$(node -p "require('./package.json').version")
+          PACKAGE_FILE=$(ls publish/*.zip | sort | tail -n 1)
+          PACKAGE_NAME=$(basename "$PACKAGE_FILE")
+          REPO_URL="https://github.com/${{ github.repository }}"
+          DOWNLOAD_URL="$REPO_URL/releases/download/v$VERSION/$PACKAGE_NAME"
+          echo "[Download $PACKAGE_NAME]($DOWNLOAD_URL)" > extracted_package/README.md
+
+          echo "//npm.pkg.github.com/:_authToken=${{ secrets.GH_PUBLISH_TOKEN }}" > ~/.npmrc
+          cd extracted_package
+          npm publish --registry=https://npm.pkg.github.com/
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GH_PUBLISH_TOKEN }}

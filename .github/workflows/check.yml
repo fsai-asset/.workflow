@@ -1,0 +1,39 @@
+name: Check
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Cache NPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      - name: Install dependencies
+        run: npm clean-install --prefer-offline --no-audit --no-fund
+      - name: Install OS tool
+        run: npm install --global platform-os-tool --no-audit --no-fund
+      - name: Package with OS tool
+        run: os package-tool . --no-increment-version
+      - name: Get version from package.json
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      - name: Fail if tag already exists
+        run: |
+          VERSION=${{ steps.get_version.outputs.version }}
+          if git ls-remote --tags origin "refs/tags/v$VERSION" | grep -q .; then
+            echo "::error title=Release Tag Exists::Tag v$VERSION already exists. Increment version and try again."
+            exit 1
+          fi
