@@ -7,18 +7,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Get version
-        id: get_version
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-      - name: Fail if tag already exists
-        run: |
-          VERSION=${{ steps.get_version.outputs.version }}
-          if git ls-remote --tags origin "refs/tags/v$VERSION" | grep -q .; then
-            echo "::error title=Release Tag Exists::Tag v$VERSION already exists. Increment version and try again."
-            exit 1
-          fi
       - name: Setup NPM cache
         uses: actions/cache@v4
         with:

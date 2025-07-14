@@ -13,18 +13,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Get version
-        id: get_version
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-      - name: Fail version already used
-        run: |
-          VERSION=${{ steps.get_version.outputs.version }}
-          if git ls-remote --tags origin "refs/tags/v$VERSION" | grep -q .; then
-            echo "::error title=Release Tag Exists::Tag v$VERSION already exists. Increment version and try again."
-            exit 1
-          fi
       - name: Setup NPM cache
         uses: actions/cache@v4
         with:
@@ -36,6 +24,15 @@ jobs:
         run: npm clean-install --prefer-offline --no-audit --no-fund
       - name: Install OS tool
         run: npm install --global platform-os-tool --no-audit --no-fund
+      - name: Get version
+        id: get_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          REVISION=${{ github.run_number }}
+          NEW_VERSION="$MAJOR.$MINOR.$REVISION"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
       - name: Package with OS tool
         run: os package-tool . --revision ${{ github.run_number }}
       - name: Find package file
