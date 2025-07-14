@@ -37,7 +37,7 @@ jobs:
       - name: Install OS tool
         run: npm install --global platform-os-tool --no-audit --no-fund
       - name: Package with OS tool
-        run: os package-tool . --no-increment-version
+        run: os package-tool . --revision ${{ github.run_number }}
       - name: Find package file
         id: find_package
         run: |
