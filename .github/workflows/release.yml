@@ -57,7 +57,7 @@ jobs:
           unzip -o "$PACKAGE" -d extracted_package
 
           # Inject download link into README.md inside extracted_package
-          VERSION=$(node -p "require('./package.json').version")
+          VERSION="${{ steps.get_version.outputs.version }}"
           PACKAGE_FILE=$(ls publish/*.zip | sort | tail -n 1)
           PACKAGE_NAME=$(basename "$PACKAGE_FILE")
           REPO_URL="https://github.com/${{ github.repository }}"
