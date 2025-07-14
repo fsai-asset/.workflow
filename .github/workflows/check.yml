@@ -18,5 +18,7 @@ jobs:
         run: npm clean-install --prefer-offline --no-audit --no-fund
       - name: Install OS tool
         run: npm install --global platform-os-tool --no-audit --no-fund
+      - name: Run project checks
+        run: npm run check
       - name: Package with OS tool
         run: os package-tool .
