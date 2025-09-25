@@ -3,6 +3,8 @@ on:
     secrets:
       PUBLISH_TOKEN:
         required: true
+      JF_ACCESS_TOKEN:
+        required: true
 
 permissions:
   contents: write
@@ -18,8 +20,15 @@ jobs:
         with:
           path: ~/.npm
           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+          restore-keys: ${{ runner.os }}-node-
+      - name: Authenticate repository
+        env:
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+        run: |
+          echo "registry=https://fsaiartifact.jfrog.io/artifactory/api/npm/fsai-private-npm-AUS-virtual/" > .npmrc
+          echo "//fsaiartifact.jfrog.io/artifactory/api/npm/fsai-private-npm-AUS-virtual/:_authToken=${JF_ACCESS_TOKEN}" >> .npmrc
+          echo "always-auth=true" >> .npmrc
+          echo "NPM_CONFIG_USERCONFIG=$PWD/.npmrc" >> $GITHUB_ENV
       - name: Install dependencies
         run: npm clean-install --prefer-offline --no-audit --no-fund
       - name: Install OS tool
@@ -28,44 +37,51 @@ jobs:
         id: get_version
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          MAJOR=$(echo $VERSION | cut -d. -f1)
-          MINOR=$(echo $VERSION | cut -d. -f2)
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MINOR=$(echo "$VERSION" | cut -d. -f2)
           REVISION=${{ github.run_number }}
           NEW_VERSION="$MAJOR.$MINOR.$REVISION"
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
       - name: Package with OS tool
         run: os package-tool . --revision ${{ github.run_number }}
       - name: Find package file
         id: find_package
         run: |
           PACKAGE=$(ls publish/*.zip | sort | tail -n 1)
-          echo "package=$PACKAGE" >> $GITHUB_OUTPUT
+          echo "package=$PACKAGE" >> "$GITHUB_OUTPUT"
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
           name: v${{ steps.get_version.outputs.version }}
-          body: |
-            ${{ github.event.head_commit.message }}
+          body: ${{ github.event.head_commit.message }}
           files: ${{ steps.find_package.outputs.package }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish GitHub Package
-        run: |
-          # PUBLISH_TOKEN currently set a dedicated PAT in BenThompson's account. Service account needs to be created.
-          PACKAGE="${{ steps.find_package.outputs.package }}"
-          unzip -o "$PACKAGE" -d extracted_package
-
-          # Inject download link into README.md inside extracted_package
-          VERSION="${{ steps.get_version.outputs.version }}"
-          PACKAGE_FILE=$(ls publish/*.zip | sort | tail -n 1)
-          PACKAGE_NAME=$(basename "$PACKAGE_FILE")
-          REPO_URL="https://github.com/${{ github.repository }}"
-          DOWNLOAD_URL="$REPO_URL/releases/download/v$VERSION/$PACKAGE_NAME"
-          echo "[Download $PACKAGE_NAME]($DOWNLOAD_URL)" > extracted_package/README.md
-
-          echo "//npm.pkg.github.com/:_authToken=${{ secrets.PUBLISH_TOKEN }}" > ~/.npmrc
-          cd extracted_package
-          npm publish --registry=https://npm.pkg.github.com/
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+          VERSION: ${{ steps.get_version.outputs.version }}
+          PACKAGE_ZIP: ${{ steps.find_package.outputs.package }}
+        run: |
+          unzip -o "$PACKAGE_ZIP" -d extracted_package
+
+          # Inject release download link
+          PKG_FILE=$(basename "$PACKAGE_ZIP")
+          REPO_URL="https://github.com/${{ github.repository }}"
+          DOWNLOAD_URL="$REPO_URL/releases/download/v$VERSION/$PKG_FILE"
+          echo "[Download $PKG_FILE]($DOWNLOAD_URL)" > extracted_package/README.md
+
+          # Create an npmrc ONLY for this publish step
+          cd extracted_package
+          echo "@${GITHUB_REPOSITORY%%/*}:registry=https://npm.pkg.github.com" > .npmrc
+          echo "//npm.pkg.github.com/:_authToken=${PUBLISH_TOKEN}" >> .npmrc
+          export NPM_CONFIG_USERCONFIG="$PWD/.npmrc"
+
+          # Ensure unique version for the package being published
+          npm version "$VERSION" --no-git-tag-version
+
+          # IMPORTANT: package.json "name" must be "@OWNER/pkg" for GitHub Packages
+          # where OWNER == repo owner (org/user). Example: "@Future-Secure-AI/my-pkg"
+          # Publish
+          npm publish --registry=https://npm.pkg.github.com/

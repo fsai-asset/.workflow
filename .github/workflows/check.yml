@@ -1,5 +1,8 @@
 on:
   workflow_call:
+    secrets:
+      JF_ACCESS_TOKEN:
+        required: true
 
 jobs:
   check:
@@ -12,8 +15,15 @@ jobs:
         with:
           path: ~/.npm
           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+          restore-keys: ${{ runner.os }}-node-
+      - name: Authenticate repository
+        env:
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+        run: |
+          echo "registry=https://fsaiartifact.jfrog.io/artifactory/api/npm/fsai-private-npm-AUS-virtual/" > .npmrc
+          echo "//fsaiartifact.jfrog.io/artifactory/api/npm/fsai-private-npm-AUS-virtual/:_authToken=${JF_ACCESS_TOKEN}" >> .npmrc
+          echo "always-auth=true" >> .npmrc
+          echo "NPM_CONFIG_USERCONFIG=$PWD/.npmrc" >> $GITHUB_ENV
       - name: Install dependencies
         run: npm clean-install --prefer-offline --no-audit --no-fund
       - name: Install OS tool
