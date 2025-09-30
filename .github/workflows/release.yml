@@ -58,30 +58,31 @@ jobs:
           files: ${{ steps.find_package.outputs.package }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Publish GitHub Package
-        env:
-          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
-          VERSION: ${{ steps.get_version.outputs.version }}
-          PACKAGE_ZIP: ${{ steps.find_package.outputs.package }}
-        run: |
-          unzip -o "$PACKAGE_ZIP" -d extracted_package
+      # Not using GitHub packages for now, and this is more complex than needed with version injection
+      # - name: Publish GitHub Package
+      #   env:
+      #     PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+      #     VERSION: ${{ steps.get_version.outputs.version }}
+      #     PACKAGE_ZIP: ${{ steps.find_package.outputs.package }}
+      #   run: |
+      #     unzip -o "$PACKAGE_ZIP" -d extracted_package
 
-          # Inject release download link
-          PKG_FILE=$(basename "$PACKAGE_ZIP")
-          REPO_URL="https://github.com/${{ github.repository }}"
-          DOWNLOAD_URL="$REPO_URL/releases/download/v$VERSION/$PKG_FILE"
-          echo "[Download $PKG_FILE]($DOWNLOAD_URL)" > extracted_package/README.md
+      #     # Inject release download link
+      #     PKG_FILE=$(basename "$PACKAGE_ZIP")
+      #     REPO_URL="https://github.com/${{ github.repository }}"
+      #     DOWNLOAD_URL="$REPO_URL/releases/download/v$VERSION/$PKG_FILE"
+      #     echo "[Download $PKG_FILE]($DOWNLOAD_URL)" > extracted_package/README.md
 
-          # Create an npmrc ONLY for this publish step
-          cd extracted_package
-          echo "@${GITHUB_REPOSITORY%%/*}:registry=https://npm.pkg.github.com" > .npmrc
-          echo "//npm.pkg.github.com/:_authToken=${PUBLISH_TOKEN}" >> .npmrc
-          export NPM_CONFIG_USERCONFIG="$PWD/.npmrc"
+      #     # Create an npmrc ONLY for this publish step
+      #     cd extracted_package
+      #     echo "@${GITHUB_REPOSITORY%%/*}:registry=https://npm.pkg.github.com" > .npmrc
+      #     echo "//npm.pkg.github.com/:_authToken=${PUBLISH_TOKEN}" >> .npmrc
+      #     export NPM_CONFIG_USERCONFIG="$PWD/.npmrc"
 
-          # Ensure unique version for the package being published
-          npm version "$VERSION" --no-git-tag-version
+      #     # Ensure unique version for the package being published
+      #     npm version "$VERSION" --no-git-tag-version
 
-          # IMPORTANT: package.json "name" must be "@OWNER/pkg" for GitHub Packages
-          # where OWNER == repo owner (org/user). Example: "@Future-Secure-AI/my-pkg"
-          # Publish
-          npm publish --registry=https://npm.pkg.github.com/
+      #     # IMPORTANT: package.json "name" must be "@OWNER/pkg" for GitHub Packages
+      #     # where OWNER == repo owner (org/user). Example: "@Future-Secure-AI/my-pkg"
+      #     # Publish
+      #     npm publish --registry=https://npm.pkg.github.com/
